@@ -10,7 +10,7 @@ import { NodeOperationError } from 'n8n-workflow';
 function parseFileMapping(hdrs: Record<string, string>): unknown[] {
 	try {
 		const raw = hdrs['x-file-mapping'];
-		return raw ? (JSON.parse(raw) as unknown[]) : [];
+		return raw ? (JSON.parse(decodeURIComponent(raw)) as unknown[]) : [];
 	} catch {
 		return [];
 	}
@@ -409,7 +409,8 @@ export class ReportFlow implements INodeType {
 					} else if (operation === 'syncMultiple') {
 						const designId = this.getNodeParameter('designId', i) as string;
 						const version = this.getNodeParameter('version', i) as number;
-						const contents = this.getNodeParameter('contents', i) as object[];
+						const contentsRaw = this.getNodeParameter('contents', i) as string | object[];
+						const contents = typeof contentsRaw === 'string' ? JSON.parse(contentsRaw) : contentsRaw;
 
 						const response = await this.helpers.httpRequestWithAuthentication.call(this, 'reportFlowAppKeyApi', {
 							method: 'POST',
@@ -439,7 +440,8 @@ export class ReportFlow implements INodeType {
 					} else if (operation === 'asyncMultiple') {
 						const designId = this.getNodeParameter('designId', i) as string;
 						const version = this.getNodeParameter('version', i) as number;
-						const contents = this.getNodeParameter('contents', i) as object[];
+						const contentsRaw = this.getNodeParameter('contents', i) as string | object[];
+						const contents = typeof contentsRaw === 'string' ? JSON.parse(contentsRaw) : contentsRaw;
 						const webhookUrl = this.getNodeParameter('webhookUrl', i, '') as string;
 
 						const body: Record<string, unknown> = { designId, version, contents };
