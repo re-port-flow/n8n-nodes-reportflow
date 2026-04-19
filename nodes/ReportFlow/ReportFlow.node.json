@@ -1,0 +1,14 @@
+{
+	"node": "n8n-nodes-base.reportFlow",
+	"nodeVersion": "1.0",
+	"codexVersion": "1.0",
+	"categories": ["Miscellaneous"],
+	"resources": {
+		"primaryDocumentation": [
+			{
+				"url": "https://doc.re-port-flow.com/docs/intro"
+			}
+		]
+	},
+	"alias": ["pdf", "report", "document", "invoice", "generate"]
+}

@@ -1,0 +1,351 @@
+{
+  "name": "Notion請求書 → ReportFlow PDF生成（Sync Single）",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "aabb0001-0000-0000-0000-000000000001",
+      "name": "テスト実行",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "resource": "databasePage",
+        "operation": "getAll",
+        "databaseId": {
+          "__rl": true,
+          "value": "f826f12f-255f-40de-bc0c-062e6570ee44",
+          "mode": "id"
+        },
+        "returnAll": true,
+        "simple": false,
+        "filterType": "manual",
+        "filters": {
+          "conditions": [
+            {
+              "key": "請求書ステータス|status",
+              "condition": "equals",
+              "statusValue": "未着手"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "aabb0001-0000-0000-0000-000000000002",
+      "name": "① 請求一覧「未着手」取得",
+      "type": "n8n-nodes-base.notion",
+      "typeVersion": 2,
+      "position": [500, 300],
+      "credentials": {
+        "notionApi": {
+          "id": "NOTION_CREDENTIAL_ID",
+          "name": "Notion account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "aabb0001-0000-0000-0000-000000000003",
+      "name": "請求書ループ",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [750, 300]
+    },
+    {
+      "parameters": {
+        "resource": "databasePage",
+        "operation": "get",
+        "pageId": {
+          "__rl": true,
+          "value": "={{ $json.properties['取引先'].relation[0].id }}",
+          "mode": "id",
+          "__regex": "^([0-9a-f]{8}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{12})"
+        },
+        "simple": false
+      },
+      "id": "aabb0001-0000-0000-0000-000000000004",
+      "name": "② 取引先情報を取得",
+      "type": "n8n-nodes-base.notion",
+      "typeVersion": 2,
+      "position": [1000, 300],
+      "credentials": {
+        "notionApi": {
+          "id": "NOTION_CREDENTIAL_ID",
+          "name": "Notion account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "databasePage",
+        "operation": "getAll",
+        "databaseId": {
+          "__rl": true,
+          "value": "f9b0d39d-8a39-4098-abdd-b29051967e43",
+          "mode": "id"
+        },
+        "returnAll": true,
+        "simple": false,
+        "filterType": "manual",
+        "filters": {
+          "conditions": [
+            {
+              "key": "請求|relation",
+              "condition": "contains",
+              "relationValue": "={{ $('請求書ループ').item.json.id }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "aabb0001-0000-0000-0000-000000000005",
+      "name": "③ 請求明細を取得",
+      "type": "n8n-nodes-base.notion",
+      "typeVersion": 2,
+      "position": [1250, 300],
+      "credentials": {
+        "notionApi": {
+          "id": "NOTION_CREDENTIAL_ID",
+          "name": "Notion account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const invoice = $('請求書ループ').first().json;\nconst client = $('② 取引先情報を取得').first().json;\nconst allItems = $input.all();\n\nconst clientName = client.properties['会社名'].title[0].plain_text ?? '';\nconst address =\n  (client.properties['都道府県']?.select?.name ?? '') +\n  (client.properties['所在地']?.rich_text?.[0]?.plain_text ?? '');\nconst lineItems = allItems.map((row, index) => ({\n  No: index + 1,\n  品目: row.json.properties['品目名']?.title[0].plain_text ?? '',\n  数量: row.json.properties['数量']?.number ?? 0,\n  単価: row.json.properties['単価']?.number ?? 0,\n  金額: row.json.properties['金額']?.formula.number ?? 0,\n  消費税: row.json.properties['消費税額']?.formula.number ?? 0,\n}));\n\nconst today = new Date().toISOString().split('T')[0];\nconst idProp = invoice.properties.ID;\nconst invoiceNumber = `${idProp?.unique_id?.prefix ?? 'INVNO'}_${idProp?.unique_id?.number ?? ''}`;\n\nreturn [{\n  json: {\n    notionPageId: invoice.id,\n    clientName,\n    fileName: `請求書_${clientName}`,\n    params: {\n      請求書番号: invoiceNumber,\n      発行日: today,\n      請求先名: clientName,\n      発行者名: '株式会社ABC',\n      発行者住所: '東京都渋谷区道玄坂1-10-8',\n      発行者メール: 'invoice@mone-pla.co.jp',\n      小計: invoice.properties['小計']?.formula.number ?? 0,\n      税率: '10',\n      消費税: invoice.properties['消費税']?.formula.number ?? 0,\n      合計金額: invoice.properties['合計']?.formula.number ?? 0,\n      通貨: 'JPY',\n      住所: address,\n      電話番号: client.properties['電話番号']?.phone_number ?? '',\n      明細: lineItems,\n    },\n  },\n}];"
+      },
+      "id": "aabb0001-0000-0000-0000-000000000006",
+      "name": "④ パラメータ組立",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1500, 300]
+    },
+    {
+      "parameters": {
+        "designId": "0eGLPoUzbuBv5EEj",
+        "fileName": "={{ $json.fileName }}",
+        "params": "={{ $json.params }}",
+        "passthrough": "={{ { notionPageId: $json.notionPageId } }}"
+      },
+      "id": "aabb0001-0000-0000-0000-000000000007",
+      "name": "⑤ PDF生成（SyncSingle）",
+      "type": "n8n-nodes-reportflow.reportFlow",
+      "typeVersion": 1,
+      "position": [1750, 300],
+      "credentials": {
+        "reportFlowAppKeyApi": {
+          "id": "REPORTFLOW_CREDENTIAL_ID",
+          "name": "ReportFlow AppKey account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.notion.com/v1/file_uploads",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "notionApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Notion-Version",
+              "value": "2026-03-11"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "filename",
+              "value": "={{ $('⑤ PDF生成（SyncSingle）').item.json.fileName + '.pdf' }}"
+            },
+            {
+              "name": "content_type",
+              "value": "application/pdf"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "aabb0001-0000-0000-0000-000000000008",
+      "name": "⑥ Notionアップロード作成",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2000, 300],
+      "credentials": {
+        "notionApi": {
+          "id": "NOTION_CREDENTIAL_ID",
+          "name": "Notion account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Notionアップロード作成のレスポンス（upload ID）とPDFのバイナリを合成する\nconst uploadId = $input.item.json.id;\nconst pdfBinary = $('⑤ PDF生成（SyncSingle）').first().binary;\n\nreturn {\n  json: { uploadId },\n  binary: pdfBinary,\n};"
+      },
+      "id": "aabb0001-0000-0000-0000-000000000009",
+      "name": "⑦ PDFバイナリを引き継ぎ",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2250, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ 'https://api.notion.com/v1/file_uploads/' + $json.uploadId + '/send' }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "notionApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Notion-Version",
+              "value": "2026-03-11"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "multipart-form-data",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "parameterType": "formBinaryData",
+              "name": "file",
+              "inputDataFieldName": "data"
+            },
+            {
+              "name": "part_number",
+              "value": "1"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "aabb0001-0000-0000-0000-000000000010",
+      "name": "⑧ NotionへPDF送信",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2500, 300],
+      "credentials": {
+        "notionApi": {
+          "id": "NOTION_CREDENTIAL_ID",
+          "name": "Notion account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "={{ 'https://api.notion.com/v1/pages/' + $('請求書ループ').first().json.id }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "notionApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Notion-Version",
+              "value": "2026-03-11"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "properties",
+              "value": "={{ { 請求書: { files: [{ type: 'file_upload', file_upload: { id: $('⑦ PDFバイナリを引き継ぎ').item.json.uploadId } }] } } }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "aabb0001-0000-0000-0000-000000000011",
+      "name": "⑨ 請求書プロパティに添付",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2750, 300],
+      "credentials": {
+        "notionApi": {
+          "id": "NOTION_CREDENTIAL_ID",
+          "name": "Notion account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "テスト実行": {
+      "main": [
+        [{ "node": "① 請求一覧「未着手」取得", "type": "main", "index": 0 }]
+      ]
+    },
+    "① 請求一覧「未着手」取得": {
+      "main": [
+        [{ "node": "請求書ループ", "type": "main", "index": 0 }]
+      ]
+    },
+    "請求書ループ": {
+      "main": [
+        [],
+        [{ "node": "② 取引先情報を取得", "type": "main", "index": 0 }]
+      ]
+    },
+    "② 取引先情報を取得": {
+      "main": [
+        [{ "node": "③ 請求明細を取得", "type": "main", "index": 0 }]
+      ]
+    },
+    "③ 請求明細を取得": {
+      "main": [
+        [{ "node": "④ パラメータ組立", "type": "main", "index": 0 }]
+      ]
+    },
+    "④ パラメータ組立": {
+      "main": [
+        [{ "node": "⑤ PDF生成（SyncSingle）", "type": "main", "index": 0 }]
+      ]
+    },
+    "⑤ PDF生成（SyncSingle）": {
+      "main": [
+        [{ "node": "⑥ Notionアップロード作成", "type": "main", "index": 0 }]
+      ]
+    },
+    "⑥ Notionアップロード作成": {
+      "main": [
+        [{ "node": "⑦ PDFバイナリを引き継ぎ", "type": "main", "index": 0 }]
+      ]
+    },
+    "⑦ PDFバイナリを引き継ぎ": {
+      "main": [
+        [{ "node": "⑧ NotionへPDF送信", "type": "main", "index": 0 }]
+      ]
+    },
+    "⑧ NotionへPDF送信": {
+      "main": [
+        [{ "node": "⑨ 請求書プロパティに添付", "type": "main", "index": 0 }]
+      ]
+    },
+    "⑨ 請求書プロパティに添付": {
+      "main": [
+        [{ "node": "請求書ループ", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "1",
+  "meta": {
+    "instanceId": "0000000000000000000000000000000000000000000000000000000000000000"
+  },
+  "id": "notion-invoice-sync-single",
+  "tags": []
+}

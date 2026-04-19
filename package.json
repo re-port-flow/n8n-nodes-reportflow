@@ -1,0 +1,53 @@
+{
+  "name": "n8n-nodes-reportflow",
+  "version": "0.1.4",
+  "description": "n8n node for Re:port Flow — the document automation platform that connects your data to PDFs. Design templates once in the visual editor, then automate generation of invoices, contracts, reports, and more from your n8n workflows. One data input, multiple documents at once. https://re-port-flow.com",
+  "keywords": [
+    "n8n-community-node-package",
+    "n8n",
+    "pdf",
+    "reportflow",
+    "pdf-generation",
+    "automation"
+  ],
+  "license": "MIT",
+  "author": {
+    "name": "Mone-pla Inc.",
+    "email": "support@re-port-flow.com",
+    "url": "https://re-port-flow.com"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/re-port-flow/n8n-nodes-reportflow.git"
+  },
+  "homepage": "https://doc.re-port-flow.com",
+  "main": "dist/nodes/ReportFlow/ReportFlow.node.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json && npm run copy:assets",
+    "copy:assets": "cp nodes/ReportFlow/reportflow.png dist/nodes/ReportFlow/ && cp nodes/ReportFlow/ReportFlow.node.json dist/nodes/ReportFlow/",
+    "dev": "tsc --watch",
+    "lint": "eslint \"nodes/**/*.ts\" \"credentials/**/*.ts\" --max-warnings=0",
+    "lint:fix": "eslint \"nodes/**/*.ts\" \"credentials/**/*.ts\" --fix",
+    "prepublishOnly": "npm run build"
+  },
+  "files": [
+    "dist/",
+    "README.md",
+    "LICENSE"
+  ],
+  "n8n": {
+    "n8nNodesApiVersion": 1,
+    "credentials": [
+      "dist/credentials/ReportFlowAppKeyApi.credentials.js",
+      "dist/credentials/ReportFlowOAuth2Api.credentials.js"
+    ],
+    "nodes": [
+      "dist/nodes/ReportFlow/ReportFlow.node.js"
+    ]
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "n8n-workflow": "*",
+    "typescript": "^5.7.0"
+  }
+}

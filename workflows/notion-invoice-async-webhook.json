@@ -1,0 +1,227 @@
+{
+  "name": "ReportFlow Webhook → PDF ダウンロード → Notion 添付",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "reportflow-callback",
+        "responseMode": "onReceived",
+        "responseData": "firstEntryJson"
+      },
+      "id": "aabb0005-0000-0000-0000-000000000001",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [250, 300],
+      "webhookId": "reportflow-callback"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// webhook ボディから requestId と files[] を展開\nconst body = $input.first().json.body ?? $input.first().json;\nconst requestId = String(body.requestId ?? '');\nconst files = body.files ?? [];\nif (!Array.isArray(files) || files.length === 0) return [{ json: {} }];\nreturn files\n  .filter(f => f.passthrough?.notionPageId)\n  .map(f => ({\n    json: {\n      requestId,\n      fileId: String(f.fileId ?? ''),\n      fileName: String(f.fileName ?? 'invoice.pdf'),\n      notionPageId: String(f.passthrough.notionPageId),\n    }\n  }));"
+      },
+      "id": "aabb0005-0000-0000-0000-000000000002",
+      "name": "① files 展開",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [500, 300]
+    },
+    {
+      "parameters": {
+        "operation": "download",
+        "requestId": "={{ $json.requestId }}",
+        "fileId": "={{ $json.fileId }}"
+      },
+      "id": "aabb0005-0000-0000-0000-000000000003",
+      "name": "② PDF ダウンロード",
+      "type": "n8n-nodes-reportflow.reportFlow",
+      "typeVersion": 1,
+      "position": [750, 300],
+      "credentials": {
+        "reportFlowAppKeyApi": {
+          "id": "REPORTFLOW_CREDENTIAL_ID",
+          "name": "ReportFlow AppKey account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.notion.com/v1/file_uploads",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "notionApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Notion-Version",
+              "value": "2026-03-11"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "filename",
+              "value": "={{ $json.fileName }}"
+            },
+            {
+              "name": "content_type",
+              "value": "application/pdf"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "aabb0005-0000-0000-0000-000000000004",
+      "name": "③ Notionアップロード作成",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1000, 300],
+      "credentials": {
+        "notionApi": {
+          "id": "NOTION_CREDENTIAL_ID",
+          "name": "Notion account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Notionアップロード作成のレスポンス（upload ID）とPDFバイナリ・notionPageId を合成する\nconst uploadId = $input.item.json.id;\nconst pdfBinary = $('② PDF ダウンロード').item.binary;\nconst notionPageId = $('① files 展開').item.json.notionPageId;\n\nreturn {\n  json: { uploadId, notionPageId },\n  binary: pdfBinary,\n};"
+      },
+      "id": "aabb0005-0000-0000-0000-000000000005",
+      "name": "④ PDFバイナリを引き継ぎ",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1250, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ 'https://api.notion.com/v1/file_uploads/' + $json.uploadId + '/send' }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "notionApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Notion-Version",
+              "value": "2026-03-11"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "multipart-form-data",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "parameterType": "formBinaryData",
+              "name": "file",
+              "inputDataFieldName": "data"
+            },
+            {
+              "name": "part_number",
+              "value": "1"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "aabb0005-0000-0000-0000-000000000006",
+      "name": "⑤ NotionへPDF送信",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1500, 300],
+      "credentials": {
+        "notionApi": {
+          "id": "NOTION_CREDENTIAL_ID",
+          "name": "Notion account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "={{ 'https://api.notion.com/v1/pages/' + $('④ PDFバイナリを引き継ぎ').item.json.notionPageId }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "notionApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Notion-Version",
+              "value": "2026-03-11"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "properties",
+              "value": "={{ { 請求書: { files: [{ type: 'file_upload', file_upload: { id: $('④ PDFバイナリを引き継ぎ').item.json.uploadId } }] } } }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "aabb0005-0000-0000-0000-000000000007",
+      "name": "⑥ 請求書プロパティに添付",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1750, 300],
+      "credentials": {
+        "notionApi": {
+          "id": "NOTION_CREDENTIAL_ID",
+          "name": "Notion account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook": {
+      "main": [
+        [{ "node": "① files 展開", "type": "main", "index": 0 }]
+      ]
+    },
+    "① files 展開": {
+      "main": [
+        [{ "node": "② PDF ダウンロード", "type": "main", "index": 0 }]
+      ]
+    },
+    "② PDF ダウンロード": {
+      "main": [
+        [{ "node": "③ Notionアップロード作成", "type": "main", "index": 0 }]
+      ]
+    },
+    "③ Notionアップロード作成": {
+      "main": [
+        [{ "node": "④ PDFバイナリを引き継ぎ", "type": "main", "index": 0 }]
+      ]
+    },
+    "④ PDFバイナリを引き継ぎ": {
+      "main": [
+        [{ "node": "⑤ NotionへPDF送信", "type": "main", "index": 0 }]
+      ]
+    },
+    "⑤ NotionへPDF送信": {
+      "main": [
+        [{ "node": "⑥ 請求書プロパティに添付", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "1",
+  "meta": {
+    "instanceId": "0000000000000000000000000000000000000000000000000000000000000000"
+  },
+  "id": "notion-invoice-async-webhook",
+  "tags": []
+}
