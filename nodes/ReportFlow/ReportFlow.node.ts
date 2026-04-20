@@ -171,8 +171,8 @@ export class ReportFlow implements INodeType {
 				type: 'string',
 				required: true,
 				default: '',
-				placeholder: 'invoice_001.pdf',
-				description: 'Output file name including extension (e.g. invoice_001.pdf)',
+				placeholder: 'invoice_001',
+				description: 'Output file name without extension. The .pdf extension is added automatically.',
 				displayOptions: {
 					show: {
 						operation: ['syncSingle', 'asyncSingle'],
@@ -233,27 +233,13 @@ export class ReportFlow implements INodeType {
 					},
 				},
 			},
-			// ---- Async-only: webhookUrl ----
-			{
-				displayName: 'Webhook URL',
-				name: 'webhookUrl',
-				type: 'string',
-				default: '',
-				placeholder: 'https://example.com/webhook',
-				description: 'URL to notify when async generation completes',
-				displayOptions: {
-					show: {
-						operation: ['asyncSingle', 'asyncMultiple'],
-					},
-				},
-			},
 			// ---- Multiple PDF fields ----
 			{
 				displayName: 'Contents (JSON Array)',
 				name: 'contents',
 				type: 'json',
 				required: true,
-				default: '[{"fileName": "file1.pdf", "shareType": "01", "passcodeEnabled": false, "params": {}}]',
+				default: '[{"fileName": "file1", "shareType": "01", "passcodeEnabled": false, "params": {}}]',
 				description: 'Array of content objects. Each element: { fileName (with extension), params, shareType ("01"=Workspace / "02"=Invited / "03"=Public), passcodeEnabled?, passthrough? }',
 				displayOptions: {
 					show: {
@@ -379,8 +365,6 @@ export class ReportFlow implements INodeType {
 						const passcodeEnabled = this.getNodeParameter('passcodeEnabled', i, false) as boolean;
 						const params = this.getNodeParameter('params', i) as object;
 						const passthrough = this.getNodeParameter('passthrough', i, {}) as object;
-						const webhookUrl = this.getNodeParameter('webhookUrl', i, '') as string;
-
 						const content: Record<string, unknown> = {
 							fileName,
 							shareType,
@@ -392,9 +376,6 @@ export class ReportFlow implements INodeType {
 						}
 
 						const body: Record<string, unknown> = { designId, version, content };
-						if (webhookUrl) {
-							body.webhookUrl = webhookUrl;
-						}
 
 						const response = await this.helpers.httpRequestWithAuthentication.call(this, 'reportFlowAppKeyApi', {
 							method: 'POST',
@@ -442,12 +423,7 @@ export class ReportFlow implements INodeType {
 						const version = this.getNodeParameter('version', i) as number;
 						const contentsRaw = this.getNodeParameter('contents', i) as string | object[];
 						const contents = typeof contentsRaw === 'string' ? JSON.parse(contentsRaw) : contentsRaw;
-						const webhookUrl = this.getNodeParameter('webhookUrl', i, '') as string;
-
 						const body: Record<string, unknown> = { designId, version, contents };
-						if (webhookUrl) {
-							body.webhookUrl = webhookUrl;
-						}
 
 						const response = await this.helpers.httpRequestWithAuthentication.call(this, 'reportFlowAppKeyApi', {
 							method: 'POST',

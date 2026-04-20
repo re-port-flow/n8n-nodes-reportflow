@@ -1,6 +1,6 @@
 {
   "name": "n8n-nodes-reportflow",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "description": "n8n node for Re:port Flow — the document automation platform that connects your data to PDFs. Design templates once in the visual editor, then automate generation of invoices, contracts, reports, and more from your n8n workflows. One data input, multiple documents at once. https://re-port-flow.com",
   "keywords": [
     "n8n-community-node-package",
