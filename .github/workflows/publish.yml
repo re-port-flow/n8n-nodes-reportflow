@@ -7,13 +7,8 @@ on:
 jobs:
   publish:
     runs-on: ubuntu-latest
-    # id-token: write を付けない。付けると npm CLI が Trusted Publishing (OIDC)
-    # の token 交換を試み、このパッケージは未登録なので 404 で失敗したうえで
-    # トークンにフォールバックし、publish が「direct publishing」扱いになって
-    # 2FA ポリシーで E403 になる（実測 2026-08-23）。
-    # 同じ org・同じ NPM_TOKEN で通っている re-port-flow/reportflow-mcp の
-    # publish.yml が id-token/--provenance のどちらも使っていないので、それに揃える。
     permissions:
+      id-token: write
       contents: read
 
     steps:
@@ -39,10 +34,8 @@ jobs:
             echo "skip=false" >> $GITHUB_OUTPUT
           fi
 
-      # --provenance を付けない（reportflow-mcp と同じ）。
-      # provenance を戻すなら Trusted Publisher を登録してからにすること。
       - name: Publish to npm
         if: steps.check.outputs.skip == 'false'
-        run: npm publish --access public
+        run: npm publish --access public --provenance
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
