@@ -7,8 +7,13 @@ on:
 jobs:
   publish:
     runs-on: ubuntu-latest
+    # id-token: write を付けない。付けると npm CLI が Trusted Publishing (OIDC)
+    # の token 交換を試み、このパッケージは未登録なので 404 で失敗したうえで
+    # トークンにフォールバックし、publish が「direct publishing」扱いになって
+    # 2FA ポリシーで E403 になる（実測 2026-08-23）。
+    # 同じ org・同じ NPM_TOKEN で通っている re-port-flow/reportflow-mcp の
+    # publish.yml が id-token/--provenance のどちらも使っていないので、それに揃える。
     permissions:
-      id-token: write
       contents: read
 
     steps:
@@ -18,23 +23,6 @@ jobs:
         with:
           node-version: "22"
           registry-url: "https://registry.npmjs.org"
-
-      # npm CLI 11.5.1 以上でないと Trusted Publishing (OIDC) が使えない。
-      # Node 22 同梱は 10.9 系なので明示的に上げる。
-      #
-      # 実測 (2026-08-23): 12.0.2 に上げたうえで、npm CLI が使うのと同じ
-      #   POST /-/npm/v1/oidc/token/exchange/package/n8n-nodes-reportflow
-      # を叩くと HTTP 404 = このパッケージには Trusted Publisher が未登録。
-      # そのため現状は下の NODE_AUTH_TOKEN 経路で publish する。
-      #
-      # npmjs.com 側で Trusted Publisher を登録したら、registry-url と
-      # NODE_AUTH_TOKEN の両方を外すこと。setup-node は registry-url 指定時に
-      # .npmrc へ `_authToken=${NODE_AUTH_TOKEN}` を書き込み、npm はその行を見て
-      # 「認証済み」と判断して OIDC を使わない (actions/setup-node#1551)。
-      - name: Upgrade npm (OIDC trusted publishing requires >= 11.5.1)
-        run: |
-          npm install -g npm@latest
-          npm --version
 
       - name: Build
         run: |
@@ -51,8 +39,10 @@ jobs:
             echo "skip=false" >> $GITHUB_OUTPUT
           fi
 
+      # --provenance を付けない（reportflow-mcp と同じ）。
+      # provenance を戻すなら Trusted Publisher を登録してからにすること。
       - name: Publish to npm
         if: steps.check.outputs.skip == 'false'
-        run: npm publish --access public --provenance
+        run: npm publish --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
