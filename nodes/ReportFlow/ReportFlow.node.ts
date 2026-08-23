@@ -4,8 +4,9 @@ import type {
 	INodeExecutionData,
 	INodeType,
 	INodeTypeDescription,
+	JsonObject,
 } from 'n8n-workflow';
-import { NodeOperationError } from 'n8n-workflow';
+import { NodeApiError, NodeOperationError } from 'n8n-workflow';
 
 function parseFileMapping(hdrs: Record<string, string>): unknown[] {
 	try {
@@ -14,6 +15,22 @@ function parseFileMapping(hdrs: Record<string, string>): unknown[] {
 	} catch {
 		return [];
 	}
+}
+
+function parseContents(raw: string | object[]): object[] {
+	if (typeof raw !== 'string') return raw;
+	try {
+		return JSON.parse(raw) as object[];
+	} catch (e) {
+		const msg = e instanceof Error ? e.message : 'Unknown error';
+		throw new Error(`Invalid JSON in "Contents (JSON Array)": ${msg}`);
+	}
+}
+
+function isHttpError(error: unknown): boolean {
+	if (!error || typeof error !== 'object') return false;
+	const e = error as { response?: unknown; statusCode?: unknown; httpCode?: unknown; cause?: { response?: unknown; statusCode?: unknown } };
+	return Boolean(e.response || e.statusCode || e.httpCode || e.cause?.response || e.cause?.statusCode);
 }
 
 export class ReportFlow implements INodeType {
@@ -240,7 +257,7 @@ export class ReportFlow implements INodeType {
 				type: 'json',
 				required: true,
 				default: '[{"fileName": "file1", "shareType": "01", "passcodeEnabled": false, "params": {}}]',
-				description: 'Array of content objects. Each element: { fileName (with extension), params, shareType ("01"=Workspace / "02"=Invited / "03"=Public), passcodeEnabled?, passthrough? }',
+				description: 'Array of content objects. Each element: { fileName (without extension), params, shareType ("01"=Workspace / "02"=Invited / "03"=Public), passcodeEnabled?, passthrough? }',
 				displayOptions: {
 					show: {
 						operation: ['syncMultiple', 'asyncMultiple'],
@@ -266,7 +283,7 @@ export class ReportFlow implements INodeType {
 				name: 'fileId',
 				type: 'string',
 				default: '',
-				description: 'fileId for single-file download. Leave empty to download the full ZIP.',
+				description: 'The file ID for single-file download. Leave empty to download the full ZIP.',
 				displayOptions: {
 					show: {
 						operation: ['download'],
@@ -391,7 +408,7 @@ export class ReportFlow implements INodeType {
 						const designId = this.getNodeParameter('designId', i) as string;
 						const version = this.getNodeParameter('version', i) as number;
 						const contentsRaw = this.getNodeParameter('contents', i) as string | object[];
-						const contents = typeof contentsRaw === 'string' ? JSON.parse(contentsRaw) : contentsRaw;
+						const contents = parseContents(contentsRaw);
 
 						const response = await this.helpers.httpRequestWithAuthentication.call(this, 'reportFlowAppKeyApi', {
 							method: 'POST',
@@ -422,7 +439,7 @@ export class ReportFlow implements INodeType {
 						const designId = this.getNodeParameter('designId', i) as string;
 						const version = this.getNodeParameter('version', i) as number;
 						const contentsRaw = this.getNodeParameter('contents', i) as string | object[];
-						const contents = typeof contentsRaw === 'string' ? JSON.parse(contentsRaw) : contentsRaw;
+						const contents = parseContents(contentsRaw);
 						const body: Record<string, unknown> = { designId, version, contents };
 
 						const response = await this.helpers.httpRequestWithAuthentication.call(this, 'reportFlowAppKeyApi', {
@@ -479,9 +496,14 @@ export class ReportFlow implements INodeType {
 					});
 					continue;
 				}
+				if (isHttpError(error)) {
+					throw new NodeApiError(this.getNode(), error as JsonObject, {
+						itemIndex: i,
+						description: apiBody ? JSON.stringify(apiBody) : undefined,
+					});
+				}
 				throw new NodeOperationError(this.getNode(), error as Error, {
 					itemIndex: i,
-					description: apiBody ? JSON.stringify(apiBody) : undefined,
 				});
 			}
 		}
