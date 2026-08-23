@@ -14,19 +14,23 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      # registry-url を指定しないこと。
-      # 指定すると setup-node が .npmrc に
-      #   //registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}
-      # を書き込む。npm CLI はその行を見て「認証は設定済み」と判断し、
-      # Trusted Publishing (OIDC) の token 交換を一切開始しないまま
-      # そのトークンで publish しようとする（actions/setup-node#1551）。
-      # 依存は全て public なので既定レジストリで npm ci は通る。
       - uses: actions/setup-node@v6
         with:
           node-version: "22"
+          registry-url: "https://registry.npmjs.org"
 
-      # Trusted Publishing (OIDC) は npm CLI 11.5.1 以上が必要。
+      # npm CLI 11.5.1 以上でないと Trusted Publishing (OIDC) が使えない。
       # Node 22 同梱は 10.9 系なので明示的に上げる。
+      #
+      # 実測 (2026-08-23): 12.0.2 に上げたうえで、npm CLI が使うのと同じ
+      #   POST /-/npm/v1/oidc/token/exchange/package/n8n-nodes-reportflow
+      # を叩くと HTTP 404 = このパッケージには Trusted Publisher が未登録。
+      # そのため現状は下の NODE_AUTH_TOKEN 経路で publish する。
+      #
+      # npmjs.com 側で Trusted Publisher を登録したら、registry-url と
+      # NODE_AUTH_TOKEN の両方を外すこと。setup-node は registry-url 指定時に
+      # .npmrc へ `_authToken=${NODE_AUTH_TOKEN}` を書き込み、npm はその行を見て
+      # 「認証済み」と判断して OIDC を使わない (actions/setup-node#1551)。
       - name: Upgrade npm (OIDC trusted publishing requires >= 11.5.1)
         run: |
           npm install -g npm@latest
@@ -47,9 +51,8 @@ jobs:
             echo "skip=false" >> $GITHUB_OUTPUT
           fi
 
-      # NODE_AUTH_TOKEN は渡さない。トークンが見えると OIDC が使われない。
-      # 認証は id-token: write による Trusted Publishing のみ。
-      # provenance は OIDC publish では自動で付くが、明示しておく。
       - name: Publish to npm
         if: steps.check.outputs.skip == 'false'
         run: npm publish --access public --provenance
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
