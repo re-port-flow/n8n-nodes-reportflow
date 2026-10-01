@@ -47,4 +47,4 @@ jobs:
       # NODE_AUTH_TOKEN は渡さない。OIDC publish では provenance は自動で付く。
       - name: Publish to npm
         if: steps.check.outputs.skip == 'false'
-        run: npm publish --access public
+        run: npm publish --access public --loglevel verbose
