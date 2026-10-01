@@ -1,6 +1,6 @@
 # n8n-nodes-reportflow
 
-This is an n8n community node for [ReportFlow](https://re-port-flow.com) — a PDF generation API that creates PDFs from design templates.
+This is an n8n community node for [ReportFlow](https://re-port-flow.com) — a PDF generation API that creates PDFs from templates.
 
 [ReportFlow](https://re-port-flow.com) is a PDF form generation API. Design templates in the visual editor, then generate PDFs via API by passing parameters.
 
@@ -23,7 +23,10 @@ This node supports two authentication methods:
 1. Register an OAuth2 client in your ReportFlow workspace
 2. In n8n, create a new **ReportFlow OAuth2 API** credential
 3. Enter your **Client ID** and **Client Secret**
-4. Configure the scopes you need (e.g., `templates:read pdf:generate`)
+4. Leave the scope at its default, `pdf:generate`. That is the only scope this
+   node needs: every endpoint it calls lives under content-service `/v1/file/*`,
+   whose guard checks for `pdf:generate` and nothing else. Requesting scopes the
+   node does not use only widens what the connection is authorized to do.
 
 ## Operations
 
@@ -36,23 +39,23 @@ This node supports two authentication methods:
 | **Generate Multiple (Async)** | Generate multiple PDFs asynchronously. |
 | **Download** | Download a previously generated file by request UUID. |
 
-### Design
+### Template
 | Operation | Description |
 |-----------|-------------|
-| **Get Parameters** | Retrieve the parameter structure of a design template. |
+| **Get Parameters** | Retrieve the parameter structure of a template. |
 
 ## Usage
 
 ### Basic PDF Generation
 1. Add the **ReportFlow** node to your workflow
 2. Select **PDF** → **Generate (Sync)**
-3. Enter your **Design ID** (UUID from the ReportFlow dashboard)
+3. Enter your **Template ID** (UUID from the ReportFlow dashboard)
 4. Set the **Version** number
 5. Provide a **File Name** (e.g., `invoice.pdf`)
-6. Enter the **Parameters** as JSON matching your design template
+6. Enter the **Parameters** as JSON matching your template
 
-### Getting Design Parameters
-Use **Design** → **Get Parameters** first to see what parameters your template expects, then pass those to the PDF generation operation.
+### Getting Template Parameters
+Use **Template** → **Get Parameters** first to see what parameters your template expects, then pass those to the PDF generation operation.
 
 ## Resources
 

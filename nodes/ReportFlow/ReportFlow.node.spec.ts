@@ -51,6 +51,33 @@ describe('ReportFlow node description', () => {
     const resource = node.description.properties.find((p) => p.name === 'resource');
     expect(resource?.default).toBe('pdf');
   });
+
+  // 仕様変更（情報設計 用語統一 2026-09）: 保存値 design は残し、キャンバスの subtitle には表示名を出す。
+  describe('subtitle', () => {
+    const evalSubtitle = (parameter: Record<string, string>): string => {
+      const expr = new ReportFlow().description.subtitle ?? '';
+      expect(expr.startsWith('={{') && expr.endsWith('}}')).toBe(true);
+      const body = expr.slice(3, -2);
+      // n8n の式は JavaScript として評価される。$parameter だけを渡して同じ式を評価する。
+      return new Function('$parameter', `return (${body});`)(parameter) as string;
+    };
+
+    it.each([
+      ['design', 'getParameters', 'Template: getParameters'],
+      ['pdf', 'syncSingle', 'PDF: syncSingle'],
+      ['pdf', 'download', 'PDF: download'],
+    ])('resource=%s operation=%s → %s', (resource, operation, expected) => {
+      expect(evalSubtitle({ resource, operation })).toBe(expected);
+    });
+
+    it('falls back to the stored value for an unknown resource', () => {
+      expect(evalSubtitle({ resource: 'other', operation: 'x' })).toBe('other: x');
+    });
+
+    it('never shows the stored value "design"', () => {
+      expect(evalSubtitle({ resource: 'design', operation: 'getParameters' })).not.toMatch(/design/);
+    });
+  });
 });
 
 describe('ReportFlow execute — design.getParameters', () => {

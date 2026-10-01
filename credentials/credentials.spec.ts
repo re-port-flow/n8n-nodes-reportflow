@@ -47,7 +47,23 @@ describe('ReportFlowOAuth2Api credential', () => {
     expect(byName('accessTokenUrl')?.default).toBe(
       'https://re-port-flow.com/api/v1/oauth/token',
     );
-    expect(byName('scope')?.default).toBe('templates:read pdf:generate');
+    // 最小権限へ縮小した（PRJ-3-1522）。本ノードが呼ぶのは content-service の
+    // `/v1/file/*` だけで、その ApplicationGuard は JWT に対し `pdf:generate`
+    // のみを検査する。`templates:read` は reposts-api・content-service の
+    // どちらでも宣言・検査されておらず、認可に一切関与していなかった。
+    expect(byName('scope')?.default).toBe('pdf:generate');
     expect(byName('authentication')?.default).toBe('body');
   });
+
+  // 保持していると、将来それを要求する口が増えた時点で利用者の再同意なしに
+  // 既存トークンが到達できてしまう。要求しないことを明示的に固定する。
+  it.each(['designs:read', 'designs:write', 'templates:read', 'templates:write'])(
+    '未使用スコープ %s を既定で要求しない',
+    (scope) => {
+      const scopeDefault = cred.properties.find((p) => p.name === 'scope')
+        ?.default as string;
+
+      expect(scopeDefault.split(' ')).not.toContain(scope);
+    },
+  );
 });

@@ -40,7 +40,11 @@ export class ReportFlow implements INodeType {
 		icon: 'file:reportflow.png',
 		group: ['output'],
 		version: 1,
-		subtitle: '={{$parameter["resource"] + ": " + $parameter["operation"]}}',
+		// resource の保存値（pdf / design）は既存ワークフロー互換のため変えない。
+		// キャンバスには値ではなく表示名（PDF / Template）を出す（情報設計 用語統一 2026-09）。
+		// 対応表に無い値は保存値をそのまま出す。
+		subtitle:
+			'={{($parameter["resource"] === "design" ? "Template" : $parameter["resource"] === "pdf" ? "PDF" : $parameter["resource"]) + ": " + $parameter["operation"]}}',
 		description: 'Stop re-entering the same data into every document. Connect your workflow data to Re:port Flow templates and generate invoices, contracts, and reports as PDFs automatically.',
 		documentationUrl: 'https://lp.re-port-flow.com',
 		defaults: {
@@ -65,12 +69,12 @@ export class ReportFlow implements INodeType {
 					{
 						name: 'PDF',
 						value: 'pdf',
-						description: 'Generate PDF files from designs',
+						description: 'Generate PDFs from templates',
 					},
 					{
-						name: 'Design',
+						name: 'Template',
 						value: 'design',
-						description: 'Get design parameter schema',
+						description: 'Get template parameter schema',
 					},
 				],
 				default: 'pdf',
@@ -135,21 +139,21 @@ export class ReportFlow implements INodeType {
 					{
 						name: 'Get Parameters',
 						value: 'getParameters',
-						description: 'Get the parameter schema of a design',
-						action: 'Get design parameters',
+						description: 'Get the parameter schema of a template',
+						action: 'Get template parameters',
 					},
 				],
 				default: 'getParameters',
 			},
 			// ---- Common: designId + version ----
 			{
-				displayName: 'Design ID',
+				displayName: 'Template ID',
 				name: 'designId',
 				type: 'string',
 				required: true,
 				default: '',
 				placeholder: '550e8400-e29b-41d4-a716-446655440000',
-				description: 'UUID of the design template',
+				description: 'UUID of the template',
 				displayOptions: {
 					show: {
 						operation: ['syncSingle', 'asyncSingle', 'syncMultiple', 'asyncMultiple', 'getParameters'],
@@ -162,7 +166,7 @@ export class ReportFlow implements INodeType {
 				type: 'number',
 				required: true,
 				default: 1,
-				description: 'Version number of the design',
+				description: 'Version number of the template',
 				displayOptions: {
 					show: {
 						operation: ['syncSingle', 'asyncSingle', 'syncMultiple', 'asyncMultiple'],
@@ -174,7 +178,7 @@ export class ReportFlow implements INodeType {
 				name: 'version',
 				type: 'number',
 				default: 0,
-				description: 'Version number of the design. Leave as 0 to use the latest version.',
+				description: 'Version number of the template. Leave as 0 to use the latest version.',
 				displayOptions: {
 					show: {
 						operation: ['getParameters'],
@@ -206,7 +210,7 @@ export class ReportFlow implements INodeType {
 					{ name: 'Public', value: '03' },
 				],
 				default: '01',
-				description: 'Access control for the generated file',
+				description: 'Access control for the generated PDF',
 				displayOptions: {
 					show: {
 						operation: ['syncSingle', 'asyncSingle'],
@@ -218,7 +222,7 @@ export class ReportFlow implements INodeType {
 				name: 'passcodeEnabled',
 				type: 'boolean',
 				default: false,
-				description: 'Whether to protect the file with a passcode',
+				description: 'Whether to protect the PDF with a passcode',
 				displayOptions: {
 					show: {
 						operation: ['syncSingle', 'asyncSingle'],
@@ -231,7 +235,7 @@ export class ReportFlow implements INodeType {
 				type: 'json',
 				required: true,
 				default: '{}',
-				description: 'Template parameters as a JSON object. Use "Get Parameters" on the Design resource to see the expected structure.',
+				description: 'Template parameters as a JSON object. Use "Get Parameters" on the Template resource to see the expected structure.',
 				displayOptions: {
 					show: {
 						operation: ['syncSingle', 'asyncSingle'],
