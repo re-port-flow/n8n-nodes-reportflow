@@ -1,6 +1,8 @@
-import type { IExecuteFunctions, INodeExecutionData } from 'n8n-workflow';
-import { NodeApiError, NodeOperationError } from 'n8n-workflow';
+import type { IExecuteFunctions, INode, INodeExecutionData, INodeType, INodeTypes } from 'n8n-workflow';
+import { NodeApiError, NodeConnectionTypes, NodeOperationError, Workflow } from 'n8n-workflow';
 import { ReportFlow } from './ReportFlow.node';
+import codex from './ReportFlow.node.json';
+import packageJson from '../../package.json';
 
 type Params = Record<string, unknown>;
 
@@ -52,14 +54,99 @@ describe('ReportFlow node description', () => {
     expect(resource?.default).toBe('pdf');
   });
 
-  // 仕様変更（情報設計 用語統一 2026-09）: 保存値 design は残し、キャンバスの subtitle には表示名を出す。
+  // n8n community node review (0.1.10): requirements the verification scan enforces.
+  describe('community node verification requirements', () => {
+    const description = new ReportFlow().description;
+
+    it('is usable as an AI agent tool', () => {
+      expect(description.usableAsTool).toBe(true);
+    });
+
+    it('uses NodeConnectionTypes.Main for inputs and outputs', () => {
+      expect(description.inputs).toEqual([NodeConnectionTypes.Main]);
+      expect(description.outputs).toEqual([NodeConnectionTypes.Main]);
+    });
+
+    it('uses an SVG icon that the build copies next to the compiled node', () => {
+      expect(description.icon).toBe('file:reportflow.svg');
+      expect(packageJson.scripts['copy:assets']).toContain(
+        'cp nodes/ReportFlow/reportflow.svg dist/nodes/ReportFlow/',
+      );
+    });
+
+    it('lists the PDF operations alphabetically by name', () => {
+      const operation = description.properties.find(
+        (p) => p.name === 'operation' && p.displayOptions?.show?.resource?.includes('pdf'),
+      );
+      const names = (operation?.options as Array<{ name: string }>).map((o) => o.name);
+      expect(names).toEqual([...names].sort((a, b) => a.localeCompare(b)));
+      expect(operation?.default).toBe('syncSingle');
+    });
+
+    it('prefixes the codex node with the npm package name', () => {
+      expect(codex.node).toBe(`${packageJson.name}.${description.name}`);
+    });
+  });
+
+  // PRJ-3-2016: designId / requestId / fileId are server-issued 16-character alphanumeric IDs, not UUIDs.
+  it('does not describe IDs as UUIDs and uses a real-format Template ID placeholder', () => {
+    const props = new ReportFlow().description.properties;
+    const designId = props.find((p) => p.name === 'designId');
+    expect(designId?.placeholder).toMatch(/^[0-9A-Za-z]{16}$/);
+    for (const p of props) {
+      const text = `${p.placeholder ?? ''} ${p.description ?? ''}`;
+      // Only the negative note "not a UUID" is allowed.
+      expect(text.replace(/not a UUID/g, '')).not.toMatch(/uuid|[0-9a-f]{8}-[0-9a-f]{4}-/i);
+    }
+  });
+
+  // PRJ-3-2016: fileName is passed as-is to the API and the binary output (the node never appends .pdf).
+  // Pin the description so it never claims "without extension" / "added automatically".
+  it('describes fileName consistently with the implementation (.pdf optional)', () => {
+    const fileName = new ReportFlow().description.properties.find((p) => p.name === 'fileName');
+    expect(fileName?.description).toMatch(/\.pdf extension is optional/);
+    expect(fileName?.description).not.toMatch(/without extension|added automatically/i);
+  });
+
+  // Spec change (terminology alignment 2026-09): the stored value "design" is kept, while the
+  // canvas subtitle shows the display name.
   describe('subtitle', () => {
-    const evalSubtitle = (parameter: Record<string, string>): string => {
-      const expr = new ReportFlow().description.subtitle ?? '';
-      expect(expr.startsWith('={{') && expr.endsWith('}}')).toBe(true);
-      const body = expr.slice(3, -2);
-      // n8n の式は JavaScript として評価される。$parameter だけを渡して同じ式を評価する。
-      return new Function('$parameter', `return (${body});`)(parameter) as string;
+    // Evaluate the subtitle with n8n's own expression engine (no dynamic code construction).
+    // The stub node type declares each given parameter as a plain string so $parameter holds
+    // exactly the given values (the real description would hide `operation` for an unknown
+    // resource through displayOptions).
+    const evalSubtitle = (parameters: Record<string, string>): string => {
+      const description = new ReportFlow().description;
+      const nodeType = {
+        description: {
+          properties: Object.keys(parameters).map((name) => ({
+            displayName: name,
+            name,
+            type: 'string',
+            default: '',
+          })),
+        },
+      } as unknown as INodeType;
+      const nodeTypes = {
+        getByName: () => nodeType,
+        getByNameAndVersion: () => nodeType,
+        getKnownTypes: () => ({}),
+      } as unknown as INodeTypes;
+      const node: INode = {
+        id: 'subtitle-test',
+        name: 'ReportFlow',
+        type: 'n8n-nodes-reportflow.reportFlow',
+        typeVersion: 1,
+        position: [0, 0],
+        parameters,
+      };
+      const workflow = new Workflow({ nodes: [node], connections: {}, active: false, nodeTypes });
+      return workflow.expression.getSimpleParameterValue(
+        node,
+        description.subtitle ?? '',
+        'internal',
+        {},
+      ) as string;
     };
 
     it.each([
@@ -341,7 +428,10 @@ describe('ReportFlow execute — contents JSON.parse failure (PRJ-3-714 #1)', ()
       const http = jest.fn();
       const promise = run({ params: paramsFor(operation), http });
       await expect(promise).rejects.toBeInstanceOf(NodeOperationError);
-      await expect(promise).rejects.toMatchObject({ message: expectedParseError });
+      await expect(promise).rejects.toMatchObject({
+        message: expectedParseError,
+        context: { itemIndex: 0 },
+      });
       expect(http).not.toHaveBeenCalled();
     },
   );
@@ -492,6 +582,24 @@ describe('ReportFlow execute — binary content and multi-item loop (PRJ-3-714 #
     expect(result[0][0].json).toEqual({ requestId: 'req-ok' });
     expect(result[0][1].json).toEqual({ error: 'boom', apiBody: null });
     expect(result[0][1].pairedItem).toEqual({ item: 1 });
+  });
+});
+
+describe('ReportFlow execute — pairedItem on every output item', () => {
+  const pdfResponse = { headers: {}, body: arrayBufferOf('%PDF') };
+  const cases: Array<[string, Params, unknown]> = [
+    ['getParameters', { resource: 'design', operation: 'getParameters', designId: 'd1' }, { schema: {} }],
+    ['syncSingle', { resource: 'pdf', operation: 'syncSingle', designId: 'd1', version: 1, fileName: 'f', params: {} }, pdfResponse],
+    ['asyncSingle', { resource: 'pdf', operation: 'asyncSingle', designId: 'd1', version: 1, fileName: 'f', params: {} }, { requestId: 'r' }],
+    ['syncMultiple', { resource: 'pdf', operation: 'syncMultiple', designId: 'd1', version: 1, contents: [] }, pdfResponse],
+    ['asyncMultiple', { resource: 'pdf', operation: 'asyncMultiple', designId: 'd1', version: 1, contents: [] }, { requestId: 'r' }],
+    ['download', { resource: 'pdf', operation: 'download', requestId: 'r' }, pdfResponse],
+  ];
+
+  it.each(cases)('%s: links each output item to its input item', async (_op, params, response) => {
+    const http = jest.fn().mockResolvedValue(response);
+    const result = await run({ params, items: [{ json: { row: 1 } }, { json: { row: 2 } }], http });
+    expect(result[0].map((item) => item.pairedItem)).toEqual([{ item: 0 }, { item: 1 }]);
   });
 });
 

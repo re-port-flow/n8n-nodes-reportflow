@@ -1,12 +1,13 @@
 import type {
 	IDataObject,
 	IExecuteFunctions,
+	INode,
 	INodeExecutionData,
 	INodeType,
 	INodeTypeDescription,
 	JsonObject,
 } from 'n8n-workflow';
-import { NodeApiError, NodeOperationError } from 'n8n-workflow';
+import { NodeApiError, NodeConnectionTypes, NodeOperationError } from 'n8n-workflow';
 
 function parseFileMapping(hdrs: Record<string, string>): unknown[] {
 	try {
@@ -17,13 +18,15 @@ function parseFileMapping(hdrs: Record<string, string>): unknown[] {
 	}
 }
 
-function parseContents(raw: string | object[]): object[] {
+function parseContents(node: INode, raw: string | object[], itemIndex: number): object[] {
 	if (typeof raw !== 'string') return raw;
 	try {
 		return JSON.parse(raw) as object[];
 	} catch (e) {
 		const msg = e instanceof Error ? e.message : 'Unknown error';
-		throw new Error(`Invalid JSON in "Contents (JSON Array)": ${msg}`);
+		throw new NodeOperationError(node, `Invalid JSON in "Contents (JSON Array)": ${msg}`, {
+			itemIndex,
+		});
 	}
 }
 
@@ -37,12 +40,12 @@ export class ReportFlow implements INodeType {
 	description: INodeTypeDescription = {
 		displayName: 'ReportFlow',
 		name: 'reportFlow',
-		icon: 'file:reportflow.png',
+		icon: 'file:reportflow.svg',
 		group: ['output'],
 		version: 1,
-		// resource の保存値（pdf / design）は既存ワークフロー互換のため変えない。
-		// キャンバスには値ではなく表示名（PDF / Template）を出す（情報設計 用語統一 2026-09）。
-		// 対応表に無い値は保存値をそのまま出す。
+		// The stored resource values (pdf / design) stay unchanged for compatibility with
+		// existing workflows. The canvas shows the display names (PDF / Template) instead of
+		// the stored values; any value not in the mapping is shown as stored.
 		subtitle:
 			'={{($parameter["resource"] === "design" ? "Template" : $parameter["resource"] === "pdf" ? "PDF" : $parameter["resource"]) + ": " + $parameter["operation"]}}',
 		description: 'Stop re-entering the same data into every document. Connect your workflow data to Re:port Flow templates and generate invoices, contracts, and reports as PDFs automatically.',
@@ -50,8 +53,8 @@ export class ReportFlow implements INodeType {
 		defaults: {
 			name: 'ReportFlow',
 		},
-		inputs: ['main'],
-		outputs: ['main'],
+		inputs: [NodeConnectionTypes.Main],
+		outputs: [NodeConnectionTypes.Main],
 		credentials: [
 			{
 				name: 'reportFlowAppKeyApi',
@@ -92,10 +95,10 @@ export class ReportFlow implements INodeType {
 				},
 				options: [
 					{
-						name: 'Generate (Sync)',
-						value: 'syncSingle',
-						description: 'Generate a single PDF synchronously and return the binary',
-						action: 'Generate a single PDF synchronously',
+						name: 'Download',
+						value: 'download',
+						description: 'Download a generated file by requestId (and optional fileId)',
+						action: 'Download a generated file',
 					},
 					{
 						name: 'Generate (Async)',
@@ -104,22 +107,22 @@ export class ReportFlow implements INodeType {
 						action: 'Generate a single PDF asynchronously',
 					},
 					{
-						name: 'Generate Multiple (Sync)',
-						value: 'syncMultiple',
-						description: 'Generate multiple PDFs synchronously and return a ZIP binary',
-						action: 'Generate multiple PDFs synchronously as ZIP',
+						name: 'Generate (Sync)',
+						value: 'syncSingle',
+						description: 'Generate a single PDF synchronously and return the binary',
+						action: 'Generate a single PDF synchronously',
 					},
 					{
 						name: 'Generate Multiple (Async)',
 						value: 'asyncMultiple',
 						description: 'Request multiple PDFs asynchronously and get requestId and file info',
-						action: 'Generate multiple PDFs asynchronously',
+						action: 'Generate multiple PDF files asynchronously',
 					},
 					{
-						name: 'Download',
-						value: 'download',
-						description: 'Download a generated file by requestId (and optional fileId)',
-						action: 'Download a generated file',
+						name: 'Generate Multiple (Sync)',
+						value: 'syncMultiple',
+						description: 'Generate multiple PDFs synchronously and return a ZIP binary',
+						action: 'Generate multiple PDF files synchronously as a zip',
 					},
 				],
 				default: 'syncSingle',
@@ -152,8 +155,8 @@ export class ReportFlow implements INodeType {
 				type: 'string',
 				required: true,
 				default: '',
-				placeholder: '550e8400-e29b-41d4-a716-446655440000',
-				description: 'UUID of the template',
+				placeholder: '0eUDdgAjNXrrItA2',
+				description: 'ID of the template: a 16-character alphanumeric string such as 0eUDdgAjNXrrItA2 (not a UUID). It appears in the template URL of the Re:port Flow app (…/templates/&lt;Template ID&gt;/…).',
 				displayOptions: {
 					show: {
 						operation: ['syncSingle', 'asyncSingle', 'syncMultiple', 'asyncMultiple', 'getParameters'],
@@ -192,8 +195,11 @@ export class ReportFlow implements INodeType {
 				type: 'string',
 				required: true,
 				default: '',
-				placeholder: 'invoice_001',
-				description: 'Output file name without extension. The .pdf extension is added automatically.',
+				placeholder: 'invoice_001.pdf',
+				// The value is sent to the API as-is and also used as-is for the binary output file name.
+				// The API strips one trailing .pdf before storing and appends .pdf to the download name,
+				// so the extension is optional and is never doubled.
+				description: 'Output file name. The .pdf extension is optional: the API stores the file as &lt;name&gt;.pdf either way and never doubles it. This node also uses the value as-is for its binary output, so include .pdf if a later node (e.g. an email attachment) needs the extension. Not allowed: / \\ : * ? " &lt; &gt; | and control characters.',
 				displayOptions: {
 					show: {
 						operation: ['syncSingle', 'asyncSingle'],
@@ -261,7 +267,7 @@ export class ReportFlow implements INodeType {
 				type: 'json',
 				required: true,
 				default: '[{"fileName": "file1", "shareType": "01", "passcodeEnabled": false, "params": {}}]',
-				description: 'Array of content objects. Each element: { fileName (without extension), params, shareType ("01"=Workspace / "02"=Invited / "03"=Public), passcodeEnabled?, passthrough? }',
+				description: 'Array of content objects (max 100). Each element: { fileName (.pdf optional; must be unique, case-insensitive), params, shareType ("01"=Workspace / "02"=Invited / "03"=Public), passcodeEnabled?, passthrough? }.',
 				displayOptions: {
 					show: {
 						operation: ['syncMultiple', 'asyncMultiple'],
@@ -275,7 +281,7 @@ export class ReportFlow implements INodeType {
 				type: 'string',
 				required: true,
 				default: '',
-				description: 'The requestId returned from a previous async generation (asyncSingle / asyncMultiple)',
+				description: 'The requestId (16-character ID, not a UUID) returned by a previous generation: the requestId of Generate (Async) / Generate Multiple (Async), or the requestId output of the sync operations',
 				displayOptions: {
 					show: {
 						operation: ['download'],
@@ -287,7 +293,7 @@ export class ReportFlow implements INodeType {
 				name: 'fileId',
 				type: 'string',
 				default: '',
-				description: 'The file ID for single-file download. Leave empty to download the full ZIP.',
+				description: 'The file ID (16-character ID) for single-file download. Leave empty to download the full ZIP.',
 				displayOptions: {
 					show: {
 						operation: ['download'],
@@ -295,6 +301,7 @@ export class ReportFlow implements INodeType {
 				},
 			},
 		],
+		usableAsTool: true,
 	};
 
 	async execute(this: IExecuteFunctions): Promise<INodeExecutionData[][]> {
@@ -330,7 +337,7 @@ export class ReportFlow implements INodeType {
 						json: true,
 					});
 
-					returnData.push({ json: response as IDataObject });
+					returnData.push({ json: response as IDataObject, pairedItem: { item: i } });
 
 				} else if (resource === 'pdf') {
 
@@ -376,6 +383,7 @@ export class ReportFlow implements INodeType {
 						returnData.push({
 							json: { fileName, requestId, fileUrl, fileMapping },
 							binary: { data: binaryData },
+							pairedItem: { item: i },
 						});
 
 					} else if (operation === 'asyncSingle') {
@@ -406,13 +414,13 @@ export class ReportFlow implements INodeType {
 							json: true,
 						});
 
-						returnData.push({ json: response as IDataObject });
+						returnData.push({ json: response as IDataObject, pairedItem: { item: i } });
 
 					} else if (operation === 'syncMultiple') {
 						const designId = this.getNodeParameter('designId', i) as string;
 						const version = this.getNodeParameter('version', i) as number;
 						const contentsRaw = this.getNodeParameter('contents', i) as string | object[];
-						const contents = parseContents(contentsRaw);
+						const contents = parseContents(this.getNode(), contentsRaw, i);
 
 						const response = await this.helpers.httpRequestWithAuthentication.call(this, 'reportFlowAppKeyApi', {
 							method: 'POST',
@@ -437,13 +445,14 @@ export class ReportFlow implements INodeType {
 						returnData.push({
 							json: { requestId, fileUrl, fileMapping },
 							binary: { data: binaryData },
+							pairedItem: { item: i },
 						});
 
 					} else if (operation === 'asyncMultiple') {
 						const designId = this.getNodeParameter('designId', i) as string;
 						const version = this.getNodeParameter('version', i) as number;
 						const contentsRaw = this.getNodeParameter('contents', i) as string | object[];
-						const contents = parseContents(contentsRaw);
+						const contents = parseContents(this.getNode(), contentsRaw, i);
 						const body: Record<string, unknown> = { designId, version, contents };
 
 						const response = await this.helpers.httpRequestWithAuthentication.call(this, 'reportFlowAppKeyApi', {
@@ -454,7 +463,7 @@ export class ReportFlow implements INodeType {
 							json: true,
 						});
 
-						returnData.push({ json: response as IDataObject });
+						returnData.push({ json: response as IDataObject, pairedItem: { item: i } });
 
 					} else if (operation === 'download') {
 						const requestId = this.getNodeParameter('requestId', i) as string;
@@ -486,6 +495,7 @@ export class ReportFlow implements INodeType {
 						returnData.push({
 							json: { requestId, fileId, fileName: downloadFileName },
 							binary: { data: binaryData },
+							pairedItem: { item: i },
 						});
 					}
 				}

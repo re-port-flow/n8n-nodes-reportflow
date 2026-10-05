@@ -1,6 +1,6 @@
 {
   "name": "n8n-nodes-reportflow",
-  "version": "0.1.10",
+  "version": "0.1.11",
   "description": "n8n node for Re:port Flow — the document automation platform that connects your data to PDFs. Design templates once in the visual editor, then automate generation of invoices, contracts, reports, and more from your n8n workflows. One data input, multiple PDFs at once. https://re-port-flow.com",
   "keywords": [
     "n8n-community-node-package",
@@ -24,7 +24,7 @@
   "main": "dist/nodes/ReportFlow/ReportFlow.node.js",
   "scripts": {
     "build": "tsc -p tsconfig.build.json && npm run copy:assets",
-    "copy:assets": "cp nodes/ReportFlow/reportflow.png dist/nodes/ReportFlow/ && cp nodes/ReportFlow/ReportFlow.node.json dist/nodes/ReportFlow/",
+    "copy:assets": "cp nodes/ReportFlow/reportflow.svg dist/nodes/ReportFlow/ && cp nodes/ReportFlow/ReportFlow.node.json dist/nodes/ReportFlow/",
     "dev": "tsc --watch",
     "lint": "eslint \"nodes/**/*.ts\" \"credentials/**/*.ts\" --max-warnings=0",
     "lint:fix": "eslint \"nodes/**/*.ts\" \"credentials/**/*.ts\" --fix",

@@ -1,9 +1,10 @@
-import type { ICredentialType, INodeProperties } from 'n8n-workflow';
+import type { Icon, ICredentialType, INodeProperties } from 'n8n-workflow';
 
 export class ReportFlowOAuth2Api implements ICredentialType {
 	name = 'reportFlowOAuth2Api';
 	extends = ['oAuth2Api'];
 	displayName = 'ReportFlow OAuth2 API';
+	icon: Icon = 'file:../nodes/ReportFlow/reportflow.svg';
 	documentationUrl = 'https://doc.re-port-flow.com';
 	properties: INodeProperties[] = [
 		{
@@ -28,14 +29,12 @@ export class ReportFlowOAuth2Api implements ICredentialType {
 			displayName: 'Scope',
 			name: 'scope',
 			type: 'string',
-			// 最小権限（PRJ-3-1522）。本ノードが呼ぶのは content-service の
-			// `/v1/file/*`（sync/async single・multiple / design/parameter /
-			// download）だけで、その ApplicationGuard は JWT に対し
-			// `pdf:generate` のみを検査する。
-			// `templates:read` は reposts-api・content-service のどちらでも
-			// 宣言・検査されておらず認可に無関与のため外した。保持したままだと
-			// 将来これを要求する口が増えた時点で、再同意なしに既存トークンが
-			// 到達できてしまう。
+			// Least privilege (PRJ-3-1522). This node only calls the content-service
+			// `/v1/file/*` endpoints (sync/async single and multiple, design/parameter,
+			// download), whose ApplicationGuard checks only `pdf:generate` on the JWT.
+			// `templates:read` is neither declared nor checked by reposts-api or
+			// content-service, so it was removed: keeping it would let existing tokens
+			// reach any future endpoint that starts requiring it, without re-consent.
 			default: 'pdf:generate',
 		},
 		{

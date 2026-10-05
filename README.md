@@ -10,6 +10,10 @@ This is an n8n community node for [ReportFlow](https://re-port-flow.com) — a P
 
 Follow the [installation guide](https://docs.n8n.io/integrations/community-nodes/installation/) in the n8n community nodes documentation.
 
+## Compatibility
+
+Requires n8n 1.85.0 or later. From v0.1.11 the node uses `NodeConnectionTypes` from `n8n-workflow`, which first ships in n8n-workflow 1.83.0 (bundled with n8n 1.85.0). On older n8n versions, use n8n-nodes-reportflow v0.1.10, the last release that does not depend on it.
+
 ## Credentials
 
 This node supports two authentication methods:
@@ -34,10 +38,10 @@ This node supports two authentication methods:
 | Operation | Description |
 |-----------|-------------|
 | **Generate (Sync)** | Generate a single PDF synchronously. Returns the PDF binary. |
-| **Generate (Async)** | Generate a single PDF asynchronously. Returns a download URL. |
+| **Generate (Async)** | Generate a single PDF asynchronously. Returns `requestId`, `url` (the output list page in the Re:port Flow app) and `files` (with `fileId`). |
 | **Generate Multiple (Sync)** | Generate multiple PDFs as a ZIP file. |
 | **Generate Multiple (Async)** | Generate multiple PDFs asynchronously. |
-| **Download** | Download a previously generated file by request UUID. |
+| **Download** | Download a previously generated file by its `requestId` (16-character ID, not a UUID) and optional `fileId`. |
 
 ### Template
 | Operation | Description |
@@ -49,9 +53,9 @@ This node supports two authentication methods:
 ### Basic PDF Generation
 1. Add the **ReportFlow** node to your workflow
 2. Select **PDF** → **Generate (Sync)**
-3. Enter your **Template ID** (UUID from the ReportFlow dashboard)
+3. Enter your **Template ID** — a 16-character alphanumeric ID such as `0eUDdgAjNXrrItA2` (not a UUID). It appears in the template URL of the Re:port Flow app (`…/templates/<Template ID>/…`).
 4. Set the **Version** number
-5. Provide a **File Name** (e.g., `invoice.pdf`)
+5. Provide a **File Name** (e.g., `invoice.pdf`). The `.pdf` extension is optional: the API stores the file as `<name>.pdf` either way and never doubles it (`invoice` and `invoice.pdf` both produce `invoice.pdf`). The node passes the value as-is to its binary output, so include `.pdf` if a later node (e.g. an email attachment) needs the extension. Not allowed: `/ \ : * ? " < > |` and control characters.
 6. Enter the **Parameters** as JSON matching your template
 
 ### Getting Template Parameters

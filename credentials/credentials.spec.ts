@@ -22,6 +22,21 @@ describe('ReportFlowAppKeyApi credential', () => {
     ]);
   });
 
+  it('declares the SVG icon shipped with the node', () => {
+    expect(cred.icon).toBe('file:../nodes/ReportFlow/reportflow.svg');
+  });
+
+  // n8n community node review (0.1.10): a credential must define a test request.
+  it('tests the key with GET /file/designs against the selected environment', () => {
+    expect(cred.test.request.method).toBe('GET');
+    expect(cred.test.request.url).toBe('/file/designs');
+    const baseURL = cred.test.request.baseURL ?? '';
+    expect(baseURL.startsWith('={{') && baseURL.endsWith('}}')).toBe(true);
+    expect(baseURL).toContain('$credentials.environment === "staging"');
+    expect(baseURL).toContain('"https://api.stg.re-port-flow.com/v1"');
+    expect(baseURL).toContain('"https://api.re-port-flow.com/v1"');
+  });
+
   it('sends the app key via the appkey header', () => {
     expect(cred.authenticate.type).toBe('generic');
     expect(cred.authenticate.properties.headers).toEqual({
@@ -38,6 +53,10 @@ describe('ReportFlowOAuth2Api credential', () => {
     expect(cred.extends).toEqual(['oAuth2Api']);
   });
 
+  it('declares the SVG icon shipped with the node', () => {
+    expect(cred.icon).toBe('file:../nodes/ReportFlow/reportflow.svg');
+  });
+
   it('pins the authorization-code grant against the ReportFlow endpoints', () => {
     const byName = (name: string) => cred.properties.find((p) => p.name === name);
     expect(byName('grantType')?.default).toBe('authorizationCode');
@@ -47,18 +66,18 @@ describe('ReportFlowOAuth2Api credential', () => {
     expect(byName('accessTokenUrl')?.default).toBe(
       'https://re-port-flow.com/api/v1/oauth/token',
     );
-    // 最小権限へ縮小した（PRJ-3-1522）。本ノードが呼ぶのは content-service の
-    // `/v1/file/*` だけで、その ApplicationGuard は JWT に対し `pdf:generate`
-    // のみを検査する。`templates:read` は reposts-api・content-service の
-    // どちらでも宣言・検査されておらず、認可に一切関与していなかった。
+    // Reduced to least privilege (PRJ-3-1522). This node only calls the content-service
+    // `/v1/file/*` endpoints, whose ApplicationGuard checks only `pdf:generate` on the JWT.
+    // `templates:read` is neither declared nor checked by reposts-api or content-service
+    // and played no part in authorization.
     expect(byName('scope')?.default).toBe('pdf:generate');
     expect(byName('authentication')?.default).toBe('body');
   });
 
-  // 保持していると、将来それを要求する口が増えた時点で利用者の再同意なしに
-  // 既存トークンが到達できてしまう。要求しないことを明示的に固定する。
+  // Keeping them would let existing tokens reach any future endpoint that starts requiring
+  // them, without the user's re-consent. Pin that they are not requested.
   it.each(['designs:read', 'designs:write', 'templates:read', 'templates:write'])(
-    '未使用スコープ %s を既定で要求しない',
+    'does not request the unused scope %s by default',
     (scope) => {
       const scopeDefault = cred.properties.find((p) => p.name === 'scope')
         ?.default as string;
