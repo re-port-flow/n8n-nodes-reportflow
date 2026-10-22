@@ -1,6 +1,14 @@
+# PRJ-3-2351: n8n本体とAlpine 3.22を維持し、同じ24系の修正済みNodeだけを取得する。
+FROM node:24.22.1-alpine3.23@sha256:0468540aa58203ff9e40c2aab3907c52644ab818af6176b1c70a026137dc92a2 AS node-patch
+
 FROM n8nio/n8n:1.123.47
 
 USER root
+
+# /usr/local/bin/nodeはn8nの既存Node実体へのリンク。COPYで実体を置換し旧バイナリを残さない。
+COPY --from=node-patch /usr/local/bin/node /usr/local/bin/node
+ENV NODE_VERSION=24.22.1
+RUN node -e "if (process.version !== 'v24.22.1') process.exit(1)"
 
 RUN mkdir -p /opt/custom-nodes/n8n-nodes-reportflow/node_modules
 
